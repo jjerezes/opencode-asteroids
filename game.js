@@ -224,6 +224,7 @@ class Ship {
     this.invincible    = 3;
     this.shootCooldown = 0;
     this.speedBoost    = 0;
+    this.tripleShot    = 0;
     this.dead          = false;
   }
 
@@ -232,6 +233,7 @@ class Ship {
     if (this.invincible    > 0) this.invincible    -= dt;
     if (this.shootCooldown > 0) this.shootCooldown -= dt;
     if (this.speedBoost    > 0) this.speedBoost    -= dt;
+    if (this.tripleShot    > 0) this.tripleShot    -= dt;
 
     const ROT   = 3.5;   // rad/s
     const THRUST = 260 * (this.speedBoost > 0 ? 2 : 1);  // px/s²
@@ -258,7 +260,13 @@ class Ship {
     const NOSE = 21;
     const ox = this.x + Math.cos(this.angle) * NOSE;
     const oy = this.y + Math.sin(this.angle) * NOSE;
-    return [new Bullet(ox, oy, this.angle)];
+    const shots = [new Bullet(ox, oy, this.angle)];
+    if (this.tripleShot > 0) {
+      const SPREAD = 0.12;
+      shots.push(new Bullet(ox, oy, this.angle - SPREAD));
+      shots.push(new Bullet(ox, oy, this.angle + SPREAD));
+    }
+    return shots;
   }
 
   draw() {
@@ -299,7 +307,7 @@ class Ship {
 // ── Power-up ──────────────────────────────────────────────────────────────────
 class PowerUp {
   constructor(x, y) {
-    this.type = 'speed';
+    this.type = Math.random() < 0.5 ? 'speed' : 'triple';
     this.x    = x;
     this.y    = y;
     this.radius = 14;
@@ -327,24 +335,35 @@ class PowerUp {
 
     const scale = 1 + 0.1 * Math.sin(this.pulse);
     const alpha = Math.min(1, this.ttl / 2);
+    const color = this.type === 'speed' ? '127, 255, 0' : '0, 229, 255';
 
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.scale(scale, scale);
-    ctx.strokeStyle = `rgba(127, 255, 0, ${alpha.toFixed(2)})`;
+    ctx.strokeStyle = `rgba(${color}, ${alpha.toFixed(2)})`;
     ctx.lineWidth   = 2;
     ctx.lineJoin    = 'round';
 
-    // Rayo (relámpago): forma del power-up de velocidad
-    ctx.beginPath();
-    ctx.moveTo( 2, -14);
-    ctx.lineTo(-6,  -2);
-    ctx.lineTo( 1,  -2);
-    ctx.lineTo(-3,  14);
-    ctx.lineTo( 6,   2);
-    ctx.lineTo(-1,   2);
-    ctx.closePath();
-    ctx.stroke();
+    if (this.type === 'speed') {
+      // Rayo (relámpago): forma del power-up de velocidad
+      ctx.beginPath();
+      ctx.moveTo( 2, -14);
+      ctx.lineTo(-6,  -2);
+      ctx.lineTo( 1,  -2);
+      ctx.lineTo(-3,  14);
+      ctx.lineTo( 6,   2);
+      ctx.lineTo(-1,   2);
+      ctx.closePath();
+      ctx.stroke();
+    } else {
+      // Triple shot: 3 puntos formando un abanico apuntando a la derecha
+      ctx.fillStyle = `rgba(${color}, ${alpha.toFixed(2)})`;
+      ctx.beginPath();
+      ctx.arc( 8, -9, 4, 0, Math.PI * 2);
+      ctx.arc(12,  0, 4, 0, Math.PI * 2);
+      ctx.arc( 8,  9, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.restore();
   }
 }
@@ -543,7 +562,8 @@ function update(dt) {
   for (const p of powerups) {
     if (dist(ship, p) < ship.radius + p.radius) {
       p.dead = true;
-      ship.speedBoost = 5;
+      if (p.type === 'speed') ship.speedBoost = 5;
+      else                    ship.tripleShot = 5;
       explode(p.x, p.y, 10);
     }
   }
@@ -585,6 +605,12 @@ function drawHUD() {
     ctx.fillStyle = '#7fff00';
     ctx.font = '14px monospace';
     ctx.fillText(`VELOCIDAD ${Math.ceil(ship.speedBoost)}s`, W / 2, 48);
+  }
+
+  if (ship.tripleShot > 0) {
+    ctx.fillStyle = '#00e5ff';
+    ctx.font = '14px monospace';
+    ctx.fillText(`TRIPLE DISPARO ${Math.ceil(ship.tripleShot)}s`, W / 2, 48);
   }
 
   for (let i = 0; i < lives; i++)
