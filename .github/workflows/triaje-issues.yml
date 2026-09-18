@@ -1,0 +1,116 @@
+name: Triaje de issues
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  triaje:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Etiquetar y publicar comentario de triaje
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issueNumber = issue.number;
+
+            // Skip issues creados por bots (p. ej. dependabot).
+            const authorType = issue.user.type || '';
+            if (authorType === 'Bot') {
+              console.log('Issue creado por un bot. Se omite el triaje.');
+              return;
+            }
+
+            // Reglas de etiquetas: se revisan primero las más específicas y se
+            // aplican todas las que coincidan. La comparación ignora acentos.
+            const RULES = [
+              { label: 'power-up', color: 'a600ff', keywords: ['power-up', 'powerup', 'power up', 'escudo', 'shield', 'disparo triple', 'triple disparo', 'tripleshot'] },
+              { label: 'skin', color: '1d76db', keywords: ['skin', 'skins', 'apariencia', 'color de la nave', 'nave nueva'] },
+              { label: 'sonido', color: 'f9d0c4', keywords: ['sonido', 'musica', 'music', 'audio', 'efectos de sonido'] },
+              { label: 'hud', color: '5319e7', keywords: ['hud', 'puntuacion', 'score', 'puntos', 'nivel', 'vidas', 'record'] },
+              { label: 'rendimiento', color: '0e8a16', keywords: ['rendimiento', 'performance', 'fps', 'lag', 'se traba', 'lento', 'no fluido'] },
+              { label: 'documentacion', color: 'c2e0c6', keywords: ['documentacion', 'readme', 'instrucciones', 'manual'] },
+              { label: 'bug', color: 'd73a4a', keywords: ['bug', 'error', 'falla', 'roto', 'no funciona', 'no carga', 'no arranca', 'crash', 'se rompe', 'pantalla negra', 'no se ve', 'no aparece', 'desaparece'] },
+              { label: 'pregunta', color: 'd4c5f9', keywords: ['como ', 'ayuda', 'duda', 'sirve para', 'que hace'] },
+              { label: 'mejora', color: 'a2eeef', keywords: ['mejora', 'mejorar', 'feature', 'idea', 'propuesta', 'sugerencia', 'seria bueno', 'estaria bueno', 'añadir', 'agregar'] },
+            ];
+
+            // Texto unificado (título + cuerpo) en minúsculas y sin acentos.
+            const raw = `${issue.title}\n${issue.body || ''}`;
+            const text = raw
+              .toLowerCase()
+              .normalize('NFD')
+              .replace(/[\u0300-\u036f]/g, '');
+
+            const matched = RULES.filter((rule) =>
+              rule.keywords.some((kw) => text.includes(kw))
+            );
+
+            // Asegura que existan los labels detectados antes de asignarlos.
+            const { data: existing } = await github.rest.issues.listLabelsForRepo({
+              owner,
+              repo,
+              per_page: 100,
+            });
+            const existingNames = new Set(existing.map((l) => l.name));
+
+            for (const rule of matched) {
+              if (!existingNames.has(rule.label)) {
+                try {
+                  await github.rest.issues.createLabel({
+                    owner,
+                    repo,
+                    name: rule.label,
+                    color: rule.color,
+                  });
+                } catch (err) {
+                  if (err.status !== 422) throw err;
+                }
+              }
+            }
+
+            if (matched.length > 0) {
+              await github.rest.issues.addLabels({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                labels: matched.map((rule) => rule.label),
+              });
+            }
+
+            const labelLines = matched.length
+              ? matched.map((rule) => `- \`${rule.label}\``).join('\n')
+              : 'Ninguna detectada';
+            const listaLabels = matched.length
+              ? matched.map((rule) => `\`${rule.label}\``).join(', ')
+              : 'ninguna';
+
+            // Comentario de triaje. La descripción original queda sin tocar.
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: issueNumber,
+              body: [
+                `Hola ${issue.user.login}, gracias por abrir el issue **#${issueNumber}**.`,
+                'Tu descripción se conserva tal cual; añadí este comentario de triaje para agilizar la revisión.',
+                '',
+                '## Checklist de triaje',
+                '- [ ] **Navegador y versión** (p. ej. Chrome 128, Firefox 130)',
+                '- [ ] **Sistema operativo** (p. ej. Windows 11, macOS Sonoma)',
+                '- [ ] **Dispositivo** (escritorio / móvil / tablet)',
+                '- [ ] **Pasos para reproducir** (qué hice exactamente)',
+                '- [ ] **Comportamiento esperado**',
+                '- [ ] **Comportamiento real**',
+                '- [ ] **Capturas de pantalla o grabación** (si aplica)',
+                '',
+                '## Etiquetas asignadas',
+                listaLabels,
+                '',
+                'Completar el checklist acelera el diagnóstico. Un humano revisará y comentará cuando pueda.',
+              ].join('\n'),
+            });
