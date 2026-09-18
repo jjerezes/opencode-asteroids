@@ -29,6 +29,21 @@ Luego visita `http://localhost:3000`.
 | `←` `→`   | Rotar nave |
 | `↑`       | Propulsar  |
 | `Espacio` | Disparar   |
+| `C`       | Cambiar skin de la nave |
+
+## Skins
+
+Pulsa `C` en cualquier momento para ciclar entre las apariencias de la nave:
+
+| Skin    | Color                              |
+| ------- | ---------------------------------- |
+| Clásica | blanco con llama naranja           |
+| Dardo   | cian, fina con doble propulsor     |
+| Buitre  | rojo, alas anchas                  |
+| Mantis  | verde neón, cabeza de flecha       |
+| Aurora  | dorado, hexagonal                  |
+
+La skin elegida se guarda en `localStorage` y se restaura al recargar la página.
 
 ## Puntuación
 
