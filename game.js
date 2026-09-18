@@ -31,7 +31,8 @@ const randInt = (min, max) => Math.floor(rand(min, max + 1));
 
 // ── Skins ─────────────────────────────────────────────────────────────────────
 // Cada skin define: nombre, color del casco, color de la llama, puntos donde
-// nace la llama y el polígono del casco (la nariz apunta hacia +x).
+// nace la llama, el polígono del casco (la nariz apunta hacia +x), un factor
+// de escala opcional (scale) y un multiplicador de puntos (points).
 const SKINS = [
   {
     id: 'clasica',
@@ -72,6 +73,16 @@ const SKINS = [
     flame: 'rgba(255, 220, 60, 0.9)',
     flames: [[-9, -4], [-9, 4]],
     shape: [[22, 0], [4, 6], [-10, 7], [-16, 0], [-10, -7], [4, -6]],
+  },
+  {
+    id: 'magna',
+    name: 'Magna',
+    hull:  '#a855f7',
+    flame: 'rgba(168, 85, 247, 0.9)',
+    flames: [[-8, 0]],
+    shape: [[20, 0], [-12, -9], [-7, 0], [-12, 9]],
+    scale: 2,
+    points: 2,
   },
 ];
 
@@ -130,6 +141,11 @@ const SPEEDS = [0, 85, 55, 32];   // velocidad base por tamaño
 const POINTS = [0, 100, 50, 20];  // puntos por tamaño
 
 const METEOR_POINTS = 150;        // puntos por estrella fugaz destruida
+
+// Puntos según la skin activa (algunas multiplican la puntuación)
+function pointsFor(base) {
+  return base * (SKINS[skinIndex].points || 1);
+}
 
 class Asteroid {
   constructor(x, y, size = 3) {
@@ -286,7 +302,7 @@ class Ship {
     this.angle  = -Math.PI / 2;
     this.vx     = 0;
     this.vy     = 0;
-    this.radius = 12;
+    this.radius = 12 * (SKINS[skinIndex].scale || 1);
     this.thrusting     = false;
     this.invincible    = 3;
     this.shootCooldown = 0;
@@ -298,6 +314,7 @@ class Ship {
 
   update(dt) {
     if (this.dead) return;
+    this.radius = 12 * (SKINS[skinIndex].scale || 1);
     if (this.invincible    > 0) this.invincible    -= dt;
     if (this.shootCooldown > 0) this.shootCooldown -= dt;
     if (this.speedBoost    > 0) this.speedBoost    -= dt;
@@ -326,7 +343,7 @@ class Ship {
   tryShoot() {
     if (this.shootCooldown > 0 || this.dead) return [];
     this.shootCooldown = 0.2;
-    const NOSE = 21;
+    const NOSE = 21 * (SKINS[skinIndex].scale || 1);
     const ox = this.x + Math.cos(this.angle) * NOSE;
     const oy = this.y + Math.sin(this.angle) * NOSE;
     const shots = [new Bullet(ox, oy, this.angle)];
@@ -348,6 +365,7 @@ class Ship {
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(this.angle);
+    ctx.scale(skin.scale || 1, skin.scale || 1);
     ctx.strokeStyle = skin.hull;
     ctx.lineWidth   = 1.5;
     ctx.lineJoin    = 'round';
@@ -384,7 +402,7 @@ class Ship {
       ctx.strokeStyle = `rgba(0, 229, 255, ${(alpha * pulse * 0.85).toFixed(2)})`;
       ctx.lineWidth   = 2;
       ctx.beginPath();
-      ctx.arc(0, 0, 18, 0, Math.PI * 2);
+      ctx.arc(0, 0, this.radius * 1.5, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }
@@ -629,7 +647,7 @@ function update(dt) {
       if (!a.dead && !b.dead && dist(b, a) < a.radius) {
         b.dead = true;
         a.dead = true;
-        score += POINTS[a.size];
+        score += pointsFor(POINTS[a.size]);
         explode(a.x, a.y, a.size * 5);
         newAsteroids.push(...a.split());
         // El asteroide puede soltar un power-up (velocidad, triple o escudo)
@@ -647,7 +665,7 @@ function update(dt) {
       if (!m.dead && !b.dead && dist(b, m) < m.radius) {
         b.dead = true;
         m.dead = true;
-        score += METEOR_POINTS;
+        score += pointsFor(METEOR_POINTS);
         explode(m.x, m.y, 8);
       }
     }
@@ -661,7 +679,7 @@ function update(dt) {
       // Con el escudo activo el asteroide se rompe sin dañar la nave
       if (ship.shield > 0) {
         a.dead = true;
-        score += POINTS[a.size];
+        score += pointsFor(POINTS[a.size]);
         explode(a.x, a.y, a.size * 5);
         ramSplits.push(...a.split());
         if (Math.random() < 0.2)
@@ -756,7 +774,7 @@ function drawHUD() {
   ctx.fillStyle   = skin.hull;
   ctx.font        = '13px monospace';
   ctx.textAlign   = 'center';
-  ctx.fillText(`NAVE: ${skin.name}   (C)`, W / 2, H - 14);
+  ctx.fillText(`NAVE: ${skin.name}${skin.points > 1 ? `  ×${skin.points} PUNTOS` : ''}   (C)`, W / 2, H - 14);
 
   // Nombre destacado al cambiar de skin
   if (skinFlash > 0) {
